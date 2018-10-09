@@ -80,7 +80,7 @@ func handleOneRepository(repository string, githubToken string) error {
 		return err
 	}
 
-	for _, pkg := range packages[:1] {
+	for _, pkg := range packages {
 		err = createBranchAndUpdatePackage(repository, tempDir, pkg, githubToken)
 		if err != nil {
 			fmt.Printf("Error handling '%s' > '%v' : %v\n", repository, pkg, err)
@@ -107,7 +107,7 @@ func createBranchAndUpdatePackage(repository string, dir string, pkg command.Out
 
 	// check if a PR is already created, if yes then do nothing
 	if command.CheckRemoteExists(dir, branch) {
-		fmt.Println("remote already exists")
+		fmt.Printf("remote already exists: '%s'\n", branch)
 		return nil
 	}
 
@@ -131,7 +131,8 @@ func createBranchAndUpdatePackage(repository string, dir string, pkg command.Out
 		return err
 	}
 
-	if err := command.CommitChanges(dir, "updating package"); err != nil {
+	commitMessage := fmt.Sprintf("updates package to %s", pkg.Latest)
+	if err := command.CommitChanges(dir, commitMessage); err != nil {
 		fmt.Println("error commiting changes")
 		return err
 	}
