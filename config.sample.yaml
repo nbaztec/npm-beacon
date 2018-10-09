@@ -1,0 +1,3 @@
+githubToken: xxxxxxxxxxxxxxxxxxxxxx
+repositories:
+  - git@github.com:nbaztec/test-node-repo
