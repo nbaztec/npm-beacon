@@ -14,3 +14,4 @@
 # Custom
 .vscode
 config.yaml
+.beacon

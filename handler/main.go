@@ -3,17 +3,25 @@ package handler
 import (
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/nbaztec/npm-beacon/command"
 )
 
-func Process2(repositories []string, githubToken string) bool {
+var privateDirName = ".beacon"
+var tempDirPrefix = "repo-"
+
+// ProcessSync update repositories in series
+func ProcessSync(repositories []string, githubToken string, olderThanDays int) bool {
+	ensurePrivateDirExists()
+
 	success := true
 	for _, repo := range repositories {
-		if err := handleOneRepository(repo, githubToken); err != nil {
+		if err := handleOneRepository(repo, githubToken, olderThanDays); err != nil {
 			fmt.Printf("Failed processing: '%s' > %v\n", repo, err)
 			success = false
 		}
@@ -22,7 +30,10 @@ func Process2(repositories []string, githubToken string) bool {
 	return success
 }
 
-func Process(repositories []string, githubToken string) bool {
+// Process updates the repositories in parallel
+func Process(repositories []string, githubToken string, olderThanDays int) bool {
+	ensurePrivateDirExists()
+
 	result := make(chan bool)
 	done := make(chan bool)
 	totalTasks := len(repositories)
@@ -30,10 +41,15 @@ func Process(repositories []string, githubToken string) bool {
 	go resultAggregator(result, done, totalTasks)
 
 	for _, repo := range repositories {
-		go process(repo, githubToken, result)
+		go process(repo, githubToken, olderThanDays, result)
 	}
 
 	return <-done
+}
+
+// ensurePrivateDirExists creates the private dir if not exists
+func ensurePrivateDirExists() {
+	os.MkdirAll(privateDirName, 0755)
 }
 
 func resultAggregator(result <-chan bool, done chan<- bool, totalTasks int) {
@@ -51,8 +67,8 @@ func resultAggregator(result <-chan bool, done chan<- bool, totalTasks int) {
 	done <- current
 }
 
-func process(repo string, githubToken string, result chan<- bool) {
-	if err := handleOneRepository(repo, githubToken); err != nil {
+func process(repo string, githubToken string, olderThanDays int, result chan<- bool) {
+	if err := handleOneRepository(repo, githubToken, olderThanDays); err != nil {
 		fmt.Printf("Failed processing: '%s' > %v\n", repo, err)
 		result <- false
 	}
@@ -60,8 +76,8 @@ func process(repo string, githubToken string, result chan<- bool) {
 	result <- true
 }
 
-func handleOneRepository(repository string, githubToken string) error {
-	tempDir, err := ioutil.TempDir(".beacon", "repo-")
+func handleOneRepository(repository string, githubToken string, olderThanDays int) error {
+	tempDir, err := ioutil.TempDir(privateDirName, tempDirPrefix)
 	defer os.RemoveAll(tempDir)
 
 	fmt.Printf("Executing in '%s' fo '%s'\n", tempDir, repository)
@@ -81,6 +97,17 @@ func handleOneRepository(repository string, githubToken string) error {
 	}
 
 	for _, pkg := range packages {
+		ok, err := isPackageOlderThan(olderThanDays, pkg)
+		if err != nil {
+			fmt.Printf("Error handling '%s' > '%v' : %v\n", repository, pkg, err)
+			continue
+		}
+
+		if !ok {
+			fmt.Printf("Skipping '%s' > '%v' : latest package is not older than %d days\n", repository, pkg, olderThanDays)
+			continue
+		}
+
 		err = createBranchAndUpdatePackage(repository, tempDir, pkg, githubToken)
 		if err != nil {
 			fmt.Printf("Error handling '%s' > '%v' : %v\n", repository, pkg, err)
@@ -109,6 +136,11 @@ func createBranchAndUpdatePackage(repository string, dir string, pkg command.Out
 	if command.CheckRemoteExists(dir, branch) {
 		fmt.Printf("remote already exists: '%s'\n", branch)
 		return nil
+	}
+
+	if err := command.ResetHeadHard(dir); err != nil {
+		fmt.Println("error resetting head")
+		return err
 	}
 
 	if err := command.CheckoutMaster(dir); err != nil {
@@ -173,4 +205,18 @@ func updatePackageVersion(dir string, pkg command.OutdatedPackage) error {
 	fmt.Println("done")
 
 	return nil
+}
+
+func isPackageOlderThan(days int, pkg command.OutdatedPackage) (bool, error) {
+	date, err := command.GetPackageReleaseDate(pkg.Name, pkg.Latest)
+	if err != nil {
+		fmt.Println("[ERROR] Error obtaining package release date")
+		return false, err
+	}
+
+	now := time.Now()
+	diff := now.Sub(date)
+	elapsedDays := int(math.Round(diff.Hours() / 24))
+
+	return elapsedDays >= days, nil
 }

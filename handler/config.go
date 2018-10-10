@@ -1,4 +1,4 @@
-package config
+package handler
 
 import (
 	"io/ioutil"
@@ -8,12 +8,13 @@ import (
 
 // Configuration class
 type Configuration struct {
-	GithubToken  string   `yaml:"githubToken"`
-	Repositories []string `yaml:"repositories"`
+	GithubToken       string   `yaml:"githubToken"`
+	Repositories      []string `yaml:"repositories"`
+	MinDaysNewRelease int      `yaml:"minDaysNewRelease"`
 }
 
-// Load configuration file
-func Load() *Configuration {
+// LoadConfiguration reads the configuration file
+func LoadConfiguration() *Configuration {
 	filepath := "./config.yaml"
 	file, err := ioutil.ReadFile(filepath)
 	if err != nil {

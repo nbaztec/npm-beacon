@@ -1,3 +1,4 @@
 githubToken: xxxxxxxxxxxxxxxxxxxxxx
+minDaysNewRelease: 7
 repositories:
   - git@github.com:nbaztec/test-node-repo

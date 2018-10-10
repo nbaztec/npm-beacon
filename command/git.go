@@ -58,6 +58,27 @@ func CheckoutMaster(repo string) error {
 	return nil
 }
 
+func ResetHeadHard(repo string) error {
+	cmd := exec.Command("git", "reset", "--hard")
+	cmd.Dir = repo
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+
+	code := getErrorCode(err)
+
+	fmt.Printf("'%s' reset-head-hard> : ", repo)
+	if code != 0 {
+		fmt.Printf("[ERROR] %s\n", string(stderr.Bytes()))
+		return err
+	}
+
+	fmt.Println("done")
+
+	return nil
+}
+
 func CreateBranch(repo string, name string) error {
 	cmd := exec.Command("git", "checkout", "-b", name)
 	cmd.Dir = repo

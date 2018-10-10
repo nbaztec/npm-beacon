@@ -3,8 +3,10 @@ package command
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
+	"time"
 )
 
 type OutdatedPackage struct {
@@ -89,6 +91,45 @@ func GetOutdatePackages(dir string) ([]OutdatedPackage, error) {
 	// fmt.Printf("%v\n", outdatedPackages)
 
 	return outdatedPackages, nil
+}
+
+func GetPackageReleaseDate(name string, version string) (time.Time, error) {
+	cmd := exec.Command("npm", "view", name+"@"+version, "time", "--json")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	fmt.Printf("get-version-date> %s@%s : ", name, version)
+
+	code := getErrorCode(err)
+	if code != 0 {
+		fmt.Printf("[ERROR] %s\n", string(stderr.Bytes()))
+		return time.Now(), err
+	}
+	// fmt.Printf("code : %d\n", code)
+	// fmt.Printf("code : %d\n", string(stdout.Bytes()))
+
+	var response map[string]string
+	if err = json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		fmt.Printf("[ERROR] %s\n", err)
+		return time.Now(), err
+	}
+
+	v, ok := response[version]
+	if ok == false {
+		fmt.Printf("[ERROR] version %s found in response\n", version)
+		return time.Now(), errors.New("version '" + version + "' not found in npm response")
+	}
+
+	t, err := time.Parse(time.RFC3339, v)
+	if err != nil {
+		return time.Now(), errors.New("time '" + v + "' cannot be parsed")
+	}
+
+	fmt.Println("done")
+
+	return t, nil
 }
 
 type npmOutdatedPackage struct {
